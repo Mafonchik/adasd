@@ -1,8 +1,9 @@
 #pragma once
 
 #include <initializer_list>
+#include <mutex>
+#include <stdexcept>
 #include <utility>
-
 template <typename T>
 class Vector {
 public:
@@ -54,5 +55,10 @@ public:
     ~Vector();
 
 private:
-    /*???*/
+    T* data_ = nullptr;
+    size_t size_ = 0;
+    size_t capacity_ = 0;
+    static constexpr size_t DefaultCapacity = 10;
+    mutable std::mutex mutex_;
+    void Reallocate(size_t new_cap);
 };
