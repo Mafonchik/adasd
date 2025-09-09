@@ -41,7 +41,7 @@ public:
     ~Vector();
 
 private:
-    static constexpr size_t kInitialCapacity = 10;
+    static constexpr size_t InitialCapacity = 10;  // Changed from kInitialCapacity to InitialCapacity
     mutable T* data_;
     size_t size_;
     size_t capacity_;
