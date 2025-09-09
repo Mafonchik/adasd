@@ -1,437 +1,319 @@
 #include "fs.hpp"
 
 #include <iostream>
-
-#include "./files/directory.hpp"
+#include <sstream>
 
 namespace filesystem {
 
-void Fs::EnsureInit() const {
-    if (!root_) {
-        auto* r = new Directory();
-        root_ = r;
-        current_ = r;
-        r->parent_ = r;
-        r->name_.clear();
-    }
+Fs::Fs() {
+    root_ = new Directory();
+    current_ = root_;
 }
 
 Fs::~Fs() {
-    if (root_) {
-        DeleteSubtree(root_);
-        delete root_;
-        root_ = nullptr;
-        current_ = nullptr;
-    }
-}
-
-std::vector<std::string> Fs::Split(const std::string& str, const std::string& splitter) {
-    std::vector<std::string> parts;
-    std::string cur;
-    for (char c : str) {
-        if (splitter.find(c) != std::string::npos) {
-            if (!cur.empty()) {
-                parts.push_back(cur);
-                cur.clear();
-            }
-        } else {
-            cur.push_back(c);
-        }
-    }
-    if (!cur.empty()) {
-        parts.push_back(cur);
-    }
-    return parts;
-}
-
-std::string Fs::JoinPath(const std::vector<std::string>& chunks) {
-    if (chunks.empty()) {
-        return "/";
-    }
-    std::string out;
-    for (size_t i = 0; i < chunks.size(); ++i) {
-        out.push_back('/');
-        out += chunks[i];
-    }
-    return out;
-}
-
-Directory* Fs::WalkTo(Directory* start, const std::vector<std::string>& parts, bool allow_create, bool create_parents) {
-    Directory* cur = start;
-    for (size_t i = 0; i < parts.size(); ++i) {
-        const std::string& p = parts[i];
-        if (p == ".") {
-            continue;
-        }
-        if (p == "..") {
-            if (cur != root_) {
-                cur = cur->parent_ ? cur->parent_ : cur;
-            }
-            continue;
-        }
-        if (cur->childs_.Find(p)) {
-            Directory* nxt = nullptr;
-            for (auto& kv : cur->childs_.Values()) {
-                if (kv.first == p) {
-                    nxt = kv.second;
-                    break;
-                }
-            }
-            if (!nxt) {
-                throw exceptions::FileNotFoundException(p);
-            }
-            cur = nxt;
-        } else {
-            if (allow_create && create_parents) {
-                auto* nd = new Directory();
-                nd->parent_ = cur;
-                nd->name_ = p;
-                cur->childs_.Insert({p, nd});
-                cur = nd;
-            } else if (allow_create && i + 1 == parts.size()) {
-                auto* nd = new Directory();
-                nd->parent_ = cur;
-                nd->name_ = p;
-                cur->childs_.Insert({p, nd});
-                cur = nd;
-            } else {
-                throw exceptions::FileNotFoundException(p);
-            }
-        }
-    }
-    return cur;
-}
-
-Directory* Fs::ResolveDir(const std::string& path, bool allow_create, bool create_parents) {
-    EnsureInit();
-    if (path.empty() || path == ".") {
-        return current_;
-    }
-    Directory* start = current_;
-    if (!path.empty() && path[0] == '/') {
-        start = root_;
-    }
-    auto parts = Split(path, "/\\");
-    return WalkTo(start, parts, allow_create, create_parents);
-}
-
-Directory* Fs::ResolveDirConst(const std::string& path) const {
-    EnsureInit();
-    if (path.empty() || path == ".") {
-        return current_;
-    }
-    Directory* curdir = (path[0] == '/') ? root_ : current_;
-    auto parts = Split(path, "/\\");
-    for (const auto& p : parts) {
-        if (p == ".") {
-            continue;
-        }
-        if (p == "..") {
-            if (curdir != root_) {
-                curdir = curdir->parent_;
-            }
-            continue;
-        }
-        if (curdir->childs_.Find(p)) {
-            Directory* nxt = nullptr;
-            for (auto& kv : curdir->childs_.Values()) {
-                if (kv.first == p) {
-                    nxt = kv.second;
-                    break;
-                }
-            }
-            if (!nxt) {
-                throw exceptions::FileNotFoundException(p);
-            }
-            curdir = nxt;
-        } else {
-            if (curdir->files_.Find(p)) {
-                throw exceptions::FileNotFoundException("Not a directory: " + p);
-            }
-            throw exceptions::FileNotFoundException(p);
-        }
-    }
-    return curdir;
-}
-
-std::string Fs::BuildCwd(const Directory* cur) {
-    std::vector<std::string> chunks;
-    const Directory* x = cur;
-    while (x && x != x->parent_) {
-        if (!x->name_.empty()) {
-            chunks.push_back(x->name_);
-        }
-        x = x->parent_;
-    }
-    std::vector<std::string> rev(chunks.rbegin(), chunks.rend());
-    return JoinPath(rev);
+    delete root_;
 }
 
 void Fs::ChangeDir(const std::string& path) {
-    EnsureInit();
-    if (path == "/") {
-        current_ = root_;
-        return;
-    }
-    if (path.empty() || path == ".") {
-        return;
-    }
-    Directory* start = (path[0] == '/') ? root_ : current_;
-    auto parts = Split(path, "/\\");
-    Directory* curdir = start;
-    for (size_t i = 0; i < parts.size(); ++i) {
-        const std::string& p = parts[i];
-        if (p == ".") {
+    std::vector<std::string> components = Split(path, "/");
+    Directory* dir = (path[0] == '/') ? root_ : current_;
+
+    size_t start_index = (!components.empty() && components[0] == "/") ? 1 : 0;
+    for (size_t i = start_index; i < components.size(); ++i) {
+        const std::string& component = components[i];
+        if (component == ".") {
             continue;
         }
-        if (p == "..") {
-            if (curdir != root_) {
-                curdir = curdir->parent_;
+        if (component == "..") {
+            if (dir->parent_) {
+                dir = dir->parent_;
             }
             continue;
         }
-        if (curdir->childs_.Find(p)) {
-            Directory* nxt = nullptr;
-            for (auto& kv : curdir->childs_.Values()) {
-                if (kv.first == p) {
-                    nxt = kv.second;
-                    break;
-                }
-            }
-            if (!nxt) {
-                throw exceptions::FileNotFoundException(p);
-            }
-            curdir = nxt;
-        } else {
-            if (curdir->files_.Find(p)) {
-                throw exceptions::FileNotFoundException("Not a directory: " + p);
-            }
-            throw exceptions::FileNotFoundException(p);
+        if (!dir->childs_.Find(component)) {
+            throw exceptions::FileNotFoundException(path);
         }
+        dir = dir->childs_[component];
     }
-    current_ = curdir;
+    current_ = dir;
 }
 
 void Fs::PWD() const {
-    EnsureInit();
-    std::cout << BuildCwd(current_) << std::endl;
-}
-
-void Fs::ListFiles(const std::string& path) const {
-    EnsureInit();
-    Directory* dir = nullptr;
-    if (path == "." || path.empty()) {
-        dir = current_;
-    } else {
-        dir = ResolveDirConst(path);
+    if (current_ == root_) {
+        std::cout << "/" << std::endl;
+        return;
     }
 
-    auto cd = dir->childs_.Values(true);
-    auto cf = dir->files_.Values(true);
-    size_t i = 0;
-    size_t j = 0;
-    while (i < cd.size() || j < cf.size()) {
-        bool take_dir = false;
-        if (j >= cf.size()) {
-            take_dir = true;
-        } else if (i < cd.size() && cd[i].first < cf[j].first) {
-            take_dir = true;
+    std::vector<std::string> components;
+    Directory* temp = current_;
+    while (temp != root_) {
+        for (const auto& [name, dir] : temp->parent_->childs_.Values()) {
+            if (dir == temp) {
+                components.push_back(name);
+                break;
+            }
         }
+        temp = temp->parent_;
+    }
 
-        if (take_dir) {
-            std::cout << cd[i].first << std::endl;
-            ++i;
-        } else {
-            std::cout << cf[j].first << std::endl;
-            ++j;
+    std::string path = "/";
+    for (size_t i = components.size(); i-- > 0;) {
+        path += components[i];
+        if (i > 0) {
+            path += "/";
         }
+    }
+    std::cout << path << std::endl;
+}
+
+void Fs::ListFiles(const std::string& path) {
+    Directory* dir = (path == "." || path.empty()) ? current_ : nullptr;
+    if (dir == nullptr) {
+        try {
+            dir = NavigatePath(path);
+        } catch (const exceptions::FileNotFoundException&) {
+            throw;
+        }
+    }
+
+    auto dirs = dir->childs_.Values();
+    auto files = dir->files_.Values();
+
+    for (const auto& [name, _] : dirs) {
+        std::cout << name << "/" << std::endl;
+    }
+    for (const auto& [name, _] : files) {
+        std::cout << name << std::endl;
     }
 }
 
 void Fs::MakeDir(const std::string& path, bool is_create_parents) {
-    EnsureInit();
-    if (path == "/" || path.empty() || path == ".") {
-        return;
+    if (path.empty()) {
+        throw exceptions::FileNotFoundException("empty path");
     }
-    bool abs = path[0] == '/';
-    auto parts = Split(path, "/\\");
-    if (parts.empty()) {
-        return;
-    }
-    Directory* base = abs ? root_ : current_;
-    if (is_create_parents) {
-        WalkTo(base, parts, true, true);
-        return;
-    }
-    if (parts.size() == 1) {
-        const std::string& name = parts[0];
-        if (!base->childs_.Find(name)) {
-            auto* nd = new Directory();
-            nd->parent_ = base;
-            nd->name_ = name;
-            base->childs_.Insert({name, nd});
+
+    std::vector<std::string> components = Split(path, "/");
+    Directory* dir = (path[0] == '/') ? root_ : current_;
+
+    size_t start_index = (!components.empty() && components[0] == "/") ? 1 : 0;
+
+    for (size_t i = start_index; i < components.size(); ++i) {
+        const std::string& component = components[i];
+        if (component == "." || component == ".." || component.empty()) {
+            continue;
         }
-        return;
-    }
-    std::vector<std::string> parent(parts.begin(), parts.end() - 1);
-    const std::string& last = parts.back();
-    Directory* pdir = WalkTo(base, parent, false, false);
-    if (!pdir->childs_.Find(last)) {
-        auto* nd = new Directory();
-        nd->parent_ = pdir;
-        nd->name_ = last;
-        pdir->childs_.Insert({last, nd});
-    }
-}
 
-Directory* Fs::FindChildByName(Directory* d, const std::string& name) {
-    for (auto& kv : d->childs_.Values()) {
-        if (kv.first == name) {
-            return kv.second;
-        }
-    }
-    return nullptr;
-}
-
-Directory* Fs::ParentForPath(Fs* fs, const std::string& path, std::string& last) {
-    bool abs = !path.empty() && path[0] == '/';
-    auto parts = Split(path, "/\\");
-    if (parts.empty()) {
-        return fs->current_;
-    }
-    last = parts.back();
-    parts.pop_back();
-    Directory* base = abs ? fs->root_ : fs->current_;
-    return fs->WalkTo(base, parts, false, false);
-}
-
-void Fs::CreateFile(const std::string& path, bool is_overwrite) {
-    EnsureInit();
-    std::string last;
-    Directory* pdir = ParentForPath(this, path, last);
-    if (last.empty()) {
-        throw exceptions::FileNotFoundException(path);
-    }
-    if (pdir->childs_.Find(last)) {
-        throw exceptions::FileNotFoundException("Path is directory: " + last);
-    }
-    if (pdir->files_.Find(last)) {
-        if (is_overwrite) {
-            for (auto& kv : pdir->files_.Values()) {
-                if (kv.first == last) {
-                    kv.second.content_.clear();
-                    pdir->files_.Insert({last, kv.second});
-                    break;
-                }
+        if (!dir->childs_.Find(component)) {
+            if (!is_create_parents && i < components.size() - 1) {
+                throw exceptions::FileNotFoundException(path);
             }
+            dir->childs_[component] = new Directory(dir);
         }
-    } else {
-        File f;
-        if (is_overwrite) {
-            f.content_.clear();
-        }
-        pdir->files_.Insert({last, f});
+        dir = dir->childs_[component];
     }
 }
 
-void Fs::WriteToFile(const std::string& path, bool is_overwrite, std::ostringstream& stream) {
-    EnsureInit();
-    std::string last;
-    Directory* pdir = ParentForPath(this, path, last);
-    if (!pdir->files_.Find(last)) {
-        throw exceptions::FileNotFoundException(last);
+std::vector<std::string> Fs::Split(const std::string& str, const std::string& splitter) {
+    std::vector<std::string> result;
+    if (str.empty()) {
+        return result;
     }
-    File cur;
-    for (auto& kv : pdir->files_.Values()) {
-        if (kv.first == last) {
-            cur = kv.second;
-            break;
+
+    size_t start = 0;
+    while (start < str.size() && str[start] == '/') {
+        start++;
+    }
+
+    if (start > 0) {
+        result.push_back("/");
+    }
+
+    size_t end = str.find(splitter, start);
+    while (end != std::string::npos) {
+        if (end != start) {
+            result.push_back(str.substr(start, end - start));
         }
+        start = end + 1;
+        end = str.find(splitter, start);
     }
-    std::string data = stream.str();
-    if (is_overwrite) {
-        cur.content_ = data;
-    } else {
-        cur.content_ += data;
+
+    if (start < str.size()) {
+        result.push_back(str.substr(start));
     }
-    pdir->files_.Insert({last, cur});
+
+    return result;
 }
 
-void Fs::ShowFileContent(const std::string& path) {
-    EnsureInit();
-    std::string last;
-    Directory* pdir = ParentForPath(this, path, last);
-    if (!pdir->files_.Find(last)) {
-        throw exceptions::FileNotFoundException(last);
+Directory* Fs::NavigatePath(const std::string& path) {
+    if (path.empty()) {
+        return current_;
     }
-    for (auto& kv : pdir->files_.Values()) {
-        if (kv.first == last) {
-            std::cout << kv.second.content_;
-            return;
-        }
-    }
-    throw exceptions::FileNotFoundException(last);
-}
 
-void Fs::DeleteSubtree(Directory* dir) {
-    auto child_list = dir->childs_.Values();
-    for (auto& kv : child_list) {
-        DeleteSubtree(kv.second);
-        delete kv.second;
+    std::vector<std::string> components = Split(path, "/");
+    Directory* dir = (path[0] == '/') ? root_ : current_;
+
+    size_t start_index = 0;
+    while (start_index < components.size() && components[start_index].empty()) {
+        start_index++;
     }
-    dir->childs_.Clear();
-    dir->files_.Clear();
+
+    for (size_t i = start_index; i < components.size(); ++i) {
+        const std::string& component = components[i];
+        if (component == "." || component.empty()) {
+            continue;
+        }
+        if (component == "..") {
+            if (dir->parent_) {
+                dir = dir->parent_;
+            }
+            continue;
+        }
+        if (!dir->childs_.Find(component)) {
+            throw exceptions::FileNotFoundException(path);
+        }
+        dir = dir->childs_[component];
+    }
+    return dir;
 }
 
 void Fs::RemoveFile(const std::string& path) {
-    EnsureInit();
+    if (path.empty()) {
+        throw exceptions::FileNotFoundException("empty path");
+    }
+
     if (path == "/") {
-        DeleteSubtree(root_);
+        delete root_;
+        root_ = new Directory();
+        current_ = root_;
         return;
     }
-    std::string last;
-    Directory* pdir = ParentForPath(this, path, last);
-    if (pdir->files_.Find(last)) {
-        pdir->files_.Erase(last);
-        return;
+
+    std::vector<std::string> components = Split(path, "/");
+    std::string name = components.back();
+    components.pop_back();
+
+    std::string dir_path;
+    size_t start_index = (!components.empty() && components[0] == "/") ? 1 : 0;
+    for (size_t i = start_index; i < components.size(); ++i) {
+        dir_path += "/" + components[i];
     }
-    if (pdir->childs_.Find(last)) {
-        Directory* node = FindChildByName(pdir, last);
-        if (!node) {
-            throw exceptions::FileNotFoundException(last);
-        }
-        DeleteSubtree(node);
-        pdir->childs_.Erase(last);
-        delete node;
-        return;
+
+    Directory* dir = dir_path.empty() ? current_ : NavigatePath(dir_path);
+
+    if (dir->files_.Find(name)) {
+        dir->files_.Erase(name);
+    } else if (dir->childs_.Find(name)) {
+        delete dir->childs_[name];
+        dir->childs_.Erase(name);
+    } else {
+        throw exceptions::FileNotFoundException(path);
     }
-    throw exceptions::FileNotFoundException(last);
 }
 
-void Fs::DfsPrintMatches(Directory* dir, const std::string& base, const std::string& name, bool& printed) {
-    for (auto& kv : dir->files_.Values(true)) {
-        if (kv.first == name) {
-            std::string p = base.empty() ? std::string("/") + name : base + "/" + name;
-            std::cout << p << std::endl;
-            printed = true;
+void Fs::CreateFile(const std::string& path, bool is_overwrite) {
+    if (path.empty() || path == "/") {
+        throw exceptions::FileNotFoundException(path);
+    }
+
+    std::vector<std::string> components = Split(path, "/");
+    std::string filename = components.back();
+    components.pop_back();
+
+    std::string dir_path;
+    if (!components.empty()) {
+        dir_path = components[0] == "/" ? "" : "/";
+        for (size_t i = (components[0] == "/" ? 1 : 0); i < components.size(); ++i) {
+            dir_path += components[i];
+            if (i < components.size() - 1) {
+                dir_path += "/";
+            }
         }
     }
-    for (auto& kv : dir->childs_.Values(true)) {
-        std::string next_base = base;
-        next_base += "/";
-        next_base += kv.first;
-        DfsPrintMatches(kv.second, next_base, name, printed);
+
+    Directory* dir = dir_path.empty() ? current_ : NavigatePath(dir_path);
+
+    if (dir->files_.Find(filename)) {
+        if (!is_overwrite) {
+            throw exceptions::FileAlreadyExistsException(path);
+        }
+        dir->files_.Erase(filename);
+    }
+    dir->files_[filename] = File();
+}
+
+void Fs::WriteToFile(const std::string& path, bool is_overwrite, std::ostream& output_stream) {
+    std::vector<std::string> components = Split(path, "/");
+    if (components.empty()) {
+        throw exceptions::FileNotFoundException(path);
+    }
+
+    std::string filename = components.back();
+    components.pop_back();
+
+    std::string dir_path;
+    size_t start_index = (!components.empty() && components[0] == "/") ? 1 : 0;
+    for (size_t i = start_index; i < components.size(); ++i) {
+        dir_path += "/" + components[i];
+    }
+
+    Directory* dir = dir_path.empty() ? current_ : NavigatePath(dir_path);
+
+    if (!dir->files_.Find(filename)) {
+        if (!is_overwrite) {
+            throw exceptions::FileNotFoundException(path);
+        }
+        dir->files_[filename] = File();
+    }
+
+    output_stream << dir->files_[filename].content;
+}
+
+void Fs::ShowFileContent(const std::string& path) {
+    std::vector<std::string> components = Split(path, "/");
+    if (components.empty()) {
+        throw exceptions::FileNotFoundException(path);
+    }
+
+    std::string filename = components.back();
+    components.pop_back();
+
+    std::string dir_path;
+    size_t start_index = (!components.empty() && components[0] == "/") ? 1 : 0;
+    for (size_t i = start_index; i < components.size(); ++i) {
+        dir_path += "/" + components[i];
+    }
+
+    Directory* dir = dir_path.empty() ? current_ : NavigatePath(dir_path);
+
+    if (!dir->files_.Find(filename)) {
+        throw exceptions::FileNotFoundException(path);
+    }
+
+    std::cout << dir->files_[filename].content << std::endl;
+}
+
+void Fs::FindFileRecursive(Directory* dir, const std::string& filename, std::vector<std::string>& paths,
+                           std::string current_path) {
+    if (dir->files_.Find(filename)) {
+        paths.push_back(current_path + (current_path == "/" ? "" : "/") + filename);
+    }
+
+    for (const auto& [name, child] : dir->childs_.Values()) {
+        FindFileRecursive(child, filename, paths, current_path + (current_path == "/" ? "" : "/") + name);
     }
 }
 
 void Fs::FindFile(const std::string& filename) {
-    EnsureInit();
-    bool printed = false;
-    DfsPrintMatches(root_, "", filename, printed);
-    if (!printed) {
+    std::vector<std::string> paths;
+    FindFileRecursive(root_, filename, paths, "/");
+
+    if (paths.empty()) {
         throw exceptions::FileNotFoundException(filename);
     }
-    std::cout << std::endl;
+
+    for (const auto& path : paths) {
+        std::cout << path << std::endl;
+    }
 }
 
 }  // namespace filesystem
