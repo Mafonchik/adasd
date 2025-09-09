@@ -149,7 +149,7 @@ public:
         }
         return *this;
     }
-ForwardListIterator Begin() const noexcept {
+    ForwardListIterator Begin() const noexcept {
         return ForwardListIterator(head_);
     }
 
