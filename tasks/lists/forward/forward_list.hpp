@@ -24,9 +24,11 @@ private:
         Node* next_{nullptr};
 
         explicit Node(const T& val, Node* prev = nullptr, Node* next = nullptr)
-            : value_(val), prev_(prev), next_(next) {}
+            : value_(val), prev_(prev), next_(next) {
+        }
         explicit Node(T&& val, Node* prev = nullptr, Node* next = nullptr)
-            : value_(std::move(val)), prev_(prev), next_(next) {}
+            : value_(std::move(val)), prev_(prev), next_(next) {
+        }
     };
 
 public:
@@ -38,7 +40,8 @@ public:
         using difference_type = std::ptrdiff_t;
         using iterator_category = std::bidirectional_iterator_tag;
 
-        ListIterator() : current_(nullptr), tail_hint_(nullptr) {}
+        ListIterator() : current_(nullptr), tail_hint_(nullptr) {
+        }
 
         bool operator==(const ListIterator& other) const {
             return current_ == other.current_;
@@ -97,8 +100,8 @@ public:
         }
 
     private:
-        explicit ListIterator(Node* node, Node* tail_hint)
-            : current_(node), tail_hint_(tail_hint) {}
+        explicit ListIterator(Node* node, Node* tail_hint) : current_(node), tail_hint_(tail_hint) {
+        }
 
         Node* current_{nullptr};
         Node* tail_hint_{nullptr};
@@ -107,7 +110,8 @@ public:
     };
 
 public:
-    List() : head_(nullptr), tail_(nullptr), size_(0) {}
+    List() : head_(nullptr), tail_(nullptr), size_(0) {
+    }
 
     explicit List(size_t sz) : head_(nullptr), tail_(nullptr), size_(0) {
         for (size_t i = 0; i < sz; ++i) {
@@ -160,8 +164,12 @@ public:
         return tail_->value_;
     }
 
-    bool IsEmpty() const noexcept { return size_ == 0; }
-    size_t Size() const noexcept { return size_; }
+    bool IsEmpty() const noexcept {
+        return size_ == 0;
+    }
+    size_t Size() const noexcept {
+        return size_;
+    }
 
     void Swap(List& other) {
         std::swap(head_, other.head_);
@@ -180,13 +188,18 @@ public:
 
     void Erase(ListIterator pos) {
         Node* n = pos.current_;
-        if (!n) return;  // удалять end() — no-op
+        if (!n)
+            return;  // удалять end() — no-op
 
-        if (n->prev_) n->prev_->next_ = n->next_;
-        else head_ = n->next_;
+        if (n->prev_)
+            n->prev_->next_ = n->next_;
+        else
+            head_ = n->next_;
 
-        if (n->next_) n->next_->prev_ = n->prev_;
-        else tail_ = n->prev_;
+        if (n->next_)
+            n->next_->prev_ = n->prev_;
+        else
+            tail_ = n->prev_;
 
         delete n;
         --size_;
@@ -250,8 +263,10 @@ public:
         }
         Node* n = tail_;
         tail_ = tail_->prev_;
-        if (tail_) tail_->next_ = nullptr;
-        else head_ = nullptr;
+        if (tail_)
+            tail_->next_ = nullptr;
+        else
+            head_ = nullptr;
         delete n;
         --size_;
     }
@@ -262,13 +277,17 @@ public:
         }
         Node* n = head_;
         head_ = head_->next_;
-        if (head_) head_->prev_ = nullptr;
-        else tail_ = nullptr;
+        if (head_)
+            head_->prev_ = nullptr;
+        else
+            tail_ = nullptr;
         delete n;
         --size_;
     }
 
-    ~List() { Clear(); }
+    ~List() {
+        Clear();
+    }
 
 private:
     Node* head_{nullptr};
