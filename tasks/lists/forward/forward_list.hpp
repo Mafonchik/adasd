@@ -13,23 +13,20 @@
 #include "exceptions.hpp"
 
 template <typename T>
-class ForwardList {
+class List {
 private:
     class Node {
-        friend class ForwardList;
+        friend class List;
         friend class ListIterator;
 
         T value_{};
+        Node* prev_{nullptr};
         Node* next_{nullptr};
 
-        explicit Node(const T& val, Node* next = nullptr)
-        : value_(val), next_(next) {}
-        explicit Node(T&& val, Node* next = nullptr)
-        : value_(std::move(val)), next_(next) {}
-
-        // Удаляем нежелательные операции
-        Node(const Node&) = delete;
-        Node& operator=(const Node&) = delete;
+        explicit Node(const T& val, Node* prev = nullptr, Node* next = nullptr)
+            : value_(val), prev_(prev), next_(next) {}
+        explicit Node(T&& val, Node* prev = nullptr, Node* next = nullptr)
+            : value_(std::move(val)), prev_(prev), next_(next) {}
     };
 
 public:
@@ -39,12 +36,9 @@ public:
         using reference = value_type&;
         using pointer = value_type*;
         using difference_type = std::ptrdiff_t;
-        using iterator_category = std::forward_iterator_tag;
+        using iterator_category = std::bidirectional_iterator_tag;
 
-        ListIterator() : current_(nullptr), list_(nullptr) {}
-
-        ListIterator(const ListIterator& other) = default;
-        ListIterator& operator=(const ListIterator& other) = default;
+        ListIterator() : current_(nullptr), tail_hint_(nullptr) {}
 
         bool operator==(const ListIterator& other) const {
             return current_ == other.current_;
@@ -73,6 +67,7 @@ public:
             if (current_ != nullptr) {
                 current_ = current_->next_;
             }
+            // если уже end(), остаёмся end()
             return *this;
         }
 
@@ -83,93 +78,72 @@ public:
             return tmp;
         }
 
-    private:
-        explicit ListIterator(Node* node, const ForwardList* list)
-        : current_(node), list_(list) {}
-
-        Node* current_{nullptr};
-        const ForwardList* list_{nullptr};
-
-        friend class ForwardList;
-    };
-
-public:
-    ForwardList() : head_(nullptr), tail_(nullptr), size_(0) {}
-
-    explicit ForwardList(size_t sz) : head_(nullptr), tail_(nullptr), size_(0) {
-        try {
-            for (size_t i = 0; i < sz; ++i) {
-                PushBack(T());
+        // --it
+        ListIterator& operator--() {
+            if (current_ != nullptr) {
+                current_ = current_->prev_;
+            } else {
+                // шаг назад от end() -> на хвост
+                current_ = tail_hint_;
             }
-        } catch (...) {
-            Clear();
-            throw;
-        }
-    }
-
-    ForwardList(const std::initializer_list<T>& values) : head_(nullptr), tail_(nullptr), size_(0) {
-        try {
-            for (const auto& v : values) {
-                PushBack(v);
-            }
-        } catch (...) {
-            Clear();
-            throw;
-        }
-    }
-
-    ForwardList(const ForwardList& other) : head_(nullptr), tail_(nullptr), size_(0) {
-        try {
-            for (Node* cur = other.head_; cur != nullptr; cur = cur->next_) {
-                PushBack(cur->value_);
-            }
-        } catch (...) {
-            Clear();
-            throw;
-        }
-    }
-
-    ForwardList(ForwardList&& other) noexcept
-    : head_(other.head_), tail_(other.tail_), size_(other.size_) {
-        other.head_ = nullptr;
-        other.tail_ = nullptr;
-        other.size_ = 0;
-    }
-
-    ForwardList& operator=(const ForwardList& other) {
-        if (this == &other) {
             return *this;
         }
 
-        ForwardList temp(other);
-        Swap(temp);
-        return *this;
+        // it--
+        ListIterator operator--(int) {
+            ListIterator tmp = *this;
+            --(*this);
+            return tmp;
+        }
+
+    private:
+        explicit ListIterator(Node* node, Node* tail_hint)
+            : current_(node), tail_hint_(tail_hint) {}
+
+        Node* current_{nullptr};
+        Node* tail_hint_{nullptr};
+
+        friend class List;
+    };
+
+public:
+    List() : head_(nullptr), tail_(nullptr), size_(0) {}
+
+    explicit List(size_t sz) : head_(nullptr), tail_(nullptr), size_(0) {
+        for (size_t i = 0; i < sz; ++i) {
+            PushBack(T{});
+        }
     }
 
-    ForwardList& operator=(ForwardList&& other) noexcept {
+    List(const std::initializer_list<T>& values) : head_(nullptr), tail_(nullptr), size_(0) {
+        for (const auto& v : values) {
+            PushBack(v);
+        }
+    }
+
+    List(const List& other) : head_(nullptr), tail_(nullptr), size_(0) {
+        for (Node* cur = other.head_; cur != nullptr; cur = cur->next_) {
+            PushBack(cur->value_);
+        }
+    }
+
+    List& operator=(const List& other) {
         if (this != &other) {
             Clear();
-            head_ = other.head_;
-            tail_ = other.tail_;
-            size_ = other.size_;
-
-            other.head_ = nullptr;
-            other.tail_ = nullptr;
-            other.size_ = 0;
+            for (Node* cur = other.head_; cur != nullptr; cur = cur->next_) {
+                PushBack(cur->value_);
+            }
         }
         return *this;
     }
 
-    ListIterator BeforeBegin() const noexcept {
-        return ListIterator(nullptr, this);
-    }
-
     ListIterator Begin() const noexcept {
-        return ListIterator(head_, this);
+        return ListIterator(head_, tail_);
     }
 
     ListIterator End() const noexcept {
-        return ListIterator(nullptr, this);
+        // end() — это «после хвоста», current_=nullptr, но мы передаём tail_ как подсказку
+        return ListIterator(nullptr, tail_);
     }
 
     T& Front() const {
@@ -189,7 +163,7 @@ public:
     bool IsEmpty() const noexcept { return size_ == 0; }
     size_t Size() const noexcept { return size_; }
 
-    void Swap(ForwardList& other) noexcept {
+    void Swap(List& other) {
         std::swap(head_, other.head_);
         std::swap(tail_, other.tail_);
         std::swap(size_, other.size_);
@@ -198,131 +172,43 @@ public:
     ListIterator Find(const T& value) const {
         for (Node* cur = head_; cur != nullptr; cur = cur->next_) {
             if (cur->value_ == value) {
-                return ListIterator(cur, this);
+                return ListIterator(cur, tail_);
             }
         }
         return End();
     }
 
-    void EraseAfter(ListIterator pos) {
-        if (pos.list_ != this) {
-            throw std::runtime_error("Iterator does not belong to this list");
-        }
-
-        Node* current = pos.current_;
-        if (current == nullptr) {
-            // EraseAfter(BeforeBegin()) - удаляем первый элемент
-            if (head_) {
-                Node* to_delete = head_;
-                head_ = head_->next_;
-                if (tail_ == to_delete) {
-                    tail_ = nullptr;
-                }
-                delete to_delete;
-                --size_;
-            }
-            return;
-        }
-
-        if (current->next_ == nullptr) {
-            return; // Нет элемента после текущего
-        }
-
-        Node* to_delete = current->next_;
-        current->next_ = to_delete->next_;
-
-        if (to_delete == tail_) {
-            tail_ = current;
-        }
-
-        delete to_delete;
-        --size_;
-    }
-
-    ListIterator InsertAfter(ListIterator pos, const T& value) {
-        if (pos.list_ != this) {
-            throw std::runtime_error("Iterator does not belong to this list");
-        }
-
-        Node* current = pos.current_;
-        if (current == nullptr) {
-            // InsertAfter(BeforeBegin()) - вставка в начало
-            PushFront(value);
-            return Begin();
-        }
-
-        Node* new_node = new Node(value, current->next_);
-        current->next_ = new_node;
-
-        if (current == tail_) {
-            tail_ = new_node;
-        }
-
-        ++size_;
-        return ListIterator(new_node, this);
-    }
-
     void Erase(ListIterator pos) {
-        if (pos.list_ != this) {
-            throw std::runtime_error("Iterator does not belong to this list");
-        }
-
         Node* n = pos.current_;
         if (!n) return;  // удалять end() — no-op
 
-        // Находим предыдущий узел
-        Node* prev = nullptr;
-        Node* cur = head_;
-        while (cur && cur != n) {
-            prev = cur;
-            cur = cur->next_;
-        }
+        if (n->prev_) n->prev_->next_ = n->next_;
+        else head_ = n->next_;
 
-        if (prev) {
-            prev->next_ = n->next_;
-        } else {
-            head_ = n->next_;
-        }
-
-        if (n == tail_) {
-            tail_ = prev;
-        }
+        if (n->next_) n->next_->prev_ = n->prev_;
+        else tail_ = n->prev_;
 
         delete n;
         --size_;
     }
 
-    ListIterator Insert(ListIterator pos, const T& value) {
-        if (pos.list_ != this) {
-            throw std::runtime_error("Iterator does not belong to this list");
-        }
-
+    void Insert(ListIterator pos, const T& value) {
         // вставка ДО pos
         if (pos.current_ == nullptr) {  // вставка перед end() => push_back
             PushBack(value);
-            return ListIterator(tail_, this);
+            return;
         }
 
         Node* at = pos.current_;
-
-        // Находим предыдущий узел
-        Node* prev = nullptr;
-        Node* cur = head_;
-        while (cur && cur != at) {
-            prev = cur;
-            cur = cur->next_;
-        }
-
-        Node* nn = new Node(value, at);
-
-        if (prev) {
-            prev->next_ = nn;
+        Node* left = at->prev_;
+        Node* nn = new Node(value, left, at);
+        at->prev_ = nn;
+        if (left) {
+            left->next_ = nn;
         } else {
             head_ = nn;
         }
-
         ++size_;
-        return ListIterator(nn, this);
     }
 
     void Clear() noexcept {
@@ -337,7 +223,7 @@ public:
     }
 
     void PushBack(const T& value) {
-        Node* nn = new Node(value);
+        Node* nn = new Node(value, tail_, nullptr);
         if (tail_) {
             tail_->next_ = nn;
         } else {
@@ -348,11 +234,13 @@ public:
     }
 
     void PushFront(const T& value) {
-        Node* nn = new Node(value, head_);
-        head_ = nn;
-        if (!tail_) {
+        Node* nn = new Node(value, nullptr, head_);
+        if (head_) {
+            head_->prev_ = nn;
+        } else {
             tail_ = nn;
         }
+        head_ = nn;
         ++size_;
     }
 
@@ -360,23 +248,11 @@ public:
         if (IsEmpty()) {
             throw ListIsEmptyException("List is empty");
         }
-
-        if (head_ == tail_) {
-            delete head_;
-            head_ = tail_ = nullptr;
-        } else {
-            // Находим предпоследний узел
-            Node* prev = nullptr;
-            Node* cur = head_;
-            while (cur->next_) {
-                prev = cur;
-                cur = cur->next_;
-            }
-
-            prev->next_ = nullptr;
-            tail_ = prev;
-            delete cur;
-        }
+        Node* n = tail_;
+        tail_ = tail_->prev_;
+        if (tail_) tail_->next_ = nullptr;
+        else head_ = nullptr;
+        delete n;
         --size_;
     }
 
@@ -386,14 +262,13 @@ public:
         }
         Node* n = head_;
         head_ = head_->next_;
-        if (!head_) {
-            tail_ = nullptr;
-        }
+        if (head_) head_->prev_ = nullptr;
+        else tail_ = nullptr;
         delete n;
         --size_;
     }
 
-    ~ForwardList() { Clear(); }
+    ~List() { Clear(); }
 
 private:
     Node* head_{nullptr};
@@ -402,9 +277,9 @@ private:
 };
 
 namespace std {
-    template <typename T>
-    // NOLINTNEXTLINE
-    void swap(ForwardList<T>& a, ForwardList<T>& b) noexcept {
-        a.Swap(b);
-    }
+template <typename T>
+// NOLINTNEXTLINE
+void swap(List<T>& a, List<T>& b) {
+    a.Swap(b);
+}
 }  // namespace std
