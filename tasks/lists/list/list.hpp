@@ -5,7 +5,9 @@
 #include <cstddef>
 #include <cstdlib>
 #include <functional>
+#include <initializer_list>
 #include <iterator>
+#include <stdexcept>
 #include <utility>
 
 #include "exceptions.hpp"
@@ -14,12 +16,19 @@ template <typename T>
 class List {
 private:
     class Node {
-        friend class ListIterator;
         friend class List;
-        /*???*/
+        friend class ListIterator;
 
-    private:
-        /*???*/
+        T value_{};
+        Node* prev_{nullptr};
+        Node* next_{nullptr};
+
+        explicit Node(const T& val, Node* prev = nullptr, Node* next = nullptr)
+            : value_(val), prev_(prev), next_(next) {
+        }
+        explicit Node(T&& val, Node* prev = nullptr, Node* next = nullptr)
+            : value_(std::move(val)), prev_(prev), next_(next) {
+        }
     };
 
 public:
@@ -28,152 +37,269 @@ public:
         // NOLINTNEXTLINE
         using value_type = T;
         // NOLINTNEXTLINE
-        using reference_type = value_type&;
+        using reference = value_type&;
         // NOLINTNEXTLINE
-        using pointer_type = value_type*;
+        using pointer = value_type*;
         // NOLINTNEXTLINE
         using difference_type = std::ptrdiff_t;
         // NOLINTNEXTLINE
         using iterator_category = std::bidirectional_iterator_tag;
 
-        inline bool operator==(const ListIterator&) const {
-            std::abort();  // Not implemented
-        };
+        ListIterator() : current_(nullptr), tail_hint_(nullptr) {
+        }
 
-        inline bool operator!=(const ListIterator&) const {
-            std::abort();  // Not implemented
-        };
+        bool operator==(const ListIterator& other) const {
+            return current_ == other.current_;
+        }
 
-        inline reference_type operator*() const {
-            std::abort();  // Not implemented
-        };
+        bool operator!=(const ListIterator& other) const {
+            return current_ != other.current_;
+        }
+
+        reference operator*() const {
+            if (current_ == nullptr) {
+                throw std::runtime_error("Dereferencing end iterator");
+            }
+            return current_->value_;
+        }
+
+        pointer operator->() const {
+            if (current_ == nullptr) {
+                throw std::runtime_error("Dereferencing end iterator");
+            }
+            return &current_->value_;
+        }
 
         ListIterator& operator++() {
-            std::abort();  // Not implemented
-        };
+            if (current_ != nullptr) {
+                current_ = current_->next_;
+            }
+            return *this;
+        }
 
         ListIterator operator++(int) {
-            std::abort();  // Not implemented
-        };
+            ListIterator tmp = *this;
+            ++(*this);
+            return tmp;
+        }
 
         ListIterator& operator--() {
-            std::abort();  // Not implemented
-        };
+            if (current_ != nullptr) {
+                current_ = current_->prev_;
+            } else {
+                current_ = tail_hint_;
+            }
+            return *this;
+        }
 
         ListIterator operator--(int) {
-            std::abort();  // Not implemented
-        };
-
-        /*The overload of operator -> must either return a raw pointer,
-        or return an object (by reference or by value) for which
-        operator -> is in turn overloaded.*/
-        inline pointer_type operator->() const {
-            std::abort();  // Not implemented
-        };
-
-    private:
-        explicit ListIterator(const Node*) {
-            // Not implemented
+            ListIterator tmp = *this;
+            --(*this);
+            return tmp;
         }
 
     private:
-        Node* current_;
+        explicit ListIterator(Node* node, Node* tail_hint) : current_(node), tail_hint_(tail_hint) {
+        }
+
+        Node* current_{nullptr};
+        Node* tail_hint_{nullptr};
+
+        friend class List;
     };
 
 public:
-    List() {
-        // Not implemented
+    List() : head_(nullptr), tail_(nullptr), size_(0) {
     }
 
-    explicit List(size_t /*sz*/) {
-        // Not implemented
+    explicit List(size_t sz) : head_(nullptr), tail_(nullptr), size_(0) {
+        for (size_t i = 0; i < sz; ++i) {
+            PushBack(T{});
+        }
     }
 
-    List(const std::initializer_list<T>& /*values*/) {
-        // Not implemented
+    List(const std::initializer_list<T>& values) : head_(nullptr), tail_(nullptr), size_(0) {
+        for (const auto& v : values) {
+            PushBack(v);
+        }
     }
 
-    List(const List& /*other*/) {
-        // Not implemented
+    List(const List& other) : head_(nullptr), tail_(nullptr), size_(0) {
+        for (Node* cur = other.head_; cur != nullptr; cur = cur->next_) {
+            PushBack(cur->value_);
+        }
     }
 
-    List& operator=(const List& /*other*/) {
-        std::abort();  // Not implemented
+    List& operator=(const List& other) {
+        if (this != &other) {
+            Clear();
+            for (Node* cur = other.head_; cur != nullptr; cur = cur->next_) {
+                PushBack(cur->value_);
+            }
+        }
+        return *this;
     }
 
     ListIterator Begin() const noexcept {
-        std::abort();  // Not implemented
+        return ListIterator(head_, tail_);
     }
 
     ListIterator End() const noexcept {
-        std::abort();  // Not implemented
+        return ListIterator(nullptr, tail_);
     }
 
-    inline T& Front() const {
-        std::abort();  // Not implemented
+    T& Front() const {
+        if (IsEmpty()) {
+            throw ListIsEmptyException("List is empty");
+        }
+        return head_->value_;
     }
 
-    inline T& Back() const {
-        std::abort();  // Not implemented
+    T& Back() const {
+        if (IsEmpty()) {
+            throw ListIsEmptyException("List is empty");
+        }
+        return tail_->value_;
     }
 
-    inline bool IsEmpty() const noexcept {
-        std::abort();  // Not implemented
+    bool IsEmpty() const noexcept {
+        return size_ == 0;
+    }
+    size_t Size() const noexcept {
+        return size_;
     }
 
-    inline size_t Size() const noexcept {
-        std::abort();  // Not implemented
+    void Swap(List& other) {
+        std::swap(head_, other.head_);
+        std::swap(tail_, other.tail_);
+        std::swap(size_, other.size_);
     }
 
-    void Swap(List& /*a*/) {
-        // Not implemented
+    ListIterator Find(const T& value) const {
+        for (Node* cur = head_; cur != nullptr; cur = cur->next_) {
+            if (cur->value_ == value) {
+                return ListIterator(cur, tail_);
+            }
+        }
+        return End();
     }
 
-    ListIterator Find(const T& /*value*/) const {
-        std::abort();  // Not implemented
+    void Erase(ListIterator pos) {
+        Node* n = pos.current_;
+        if (!n) {
+            return;
+        }
+
+        if (n->prev_) {
+            n->prev_->next_ = n->next_;
+        } else {
+            head_ = n->next_;
+        }
+
+        if (n->next_) {
+            n->next_->prev_ = n->prev_;
+        } else {
+            tail_ = n->prev_;
+        }
+
+        delete n;
+        --size_;
     }
 
-    void Erase(ListIterator /*pos*/) {
-        // Not implemented
-    }
+    void Insert(ListIterator pos, const T& value) {
+        if (pos.current_ == nullptr) {
+            PushBack(value);
+            return;
+        }
 
-    void Insert(ListIterator /*pos*/, const T& /*value*/) {
-        // Not implemented
+        Node* at = pos.current_;
+        Node* left = at->prev_;
+        Node* nn = new Node(value, left, at);
+        at->prev_ = nn;
+        if (left) {
+            left->next_ = nn;
+        } else {
+            head_ = nn;
+        }
+        ++size_;
     }
 
     void Clear() noexcept {
-        // Not implemented
+        Node* cur = head_;
+        while (cur) {
+            Node* nxt = cur->next_;
+            delete cur;
+            cur = nxt;
+        }
+        head_ = tail_ = nullptr;
+        size_ = 0;
     }
 
-    void PushBack(const T& /*value*/) {
-        // Not implemented
+    void PushBack(const T& value) {
+        Node* nn = new Node(value, tail_, nullptr);
+        if (tail_) {
+            tail_->next_ = nn;
+        } else {
+            head_ = nn;
+        }
+        tail_ = nn;
+        ++size_;
     }
 
-    void PushFront(const T& /*value*/) {
-        // Not implemented
+    void PushFront(const T& value) {
+        Node* nn = new Node(value, nullptr, head_);
+        if (head_) {
+            head_->prev_ = nn;
+        } else {
+            tail_ = nn;
+        }
+        head_ = nn;
+        ++size_;
     }
 
     void PopBack() {
-        // Not implemented
+        if (IsEmpty()) {
+            throw ListIsEmptyException("List is empty");
+        }
+        Node* n = tail_;
+        tail_ = tail_->prev_;
+        if (tail_) {
+            tail_->next_ = nullptr;
+        } else {
+            head_ = nullptr;
+        }
+        delete n;
+        --size_;
     }
 
     void PopFront() {
-        // Not implemented
+        if (IsEmpty()) {
+            throw ListIsEmptyException("List is empty");
+        }
+        Node* n = head_;
+        head_ = head_->next_;
+        if (head_) {
+            head_->prev_ = nullptr;
+        } else {
+            tail_ = nullptr;
+        }
+        delete n;
+        --size_;
     }
 
     ~List() {
-        // Not implemented
+        Clear();
     }
 
 private:
-    /*???*/
+    Node* head_{nullptr};
+    Node* tail_{nullptr};
+    size_t size_{0};
 };
 
 namespace std {
-// Global swap overloading
 template <typename T>
-// NOLINTNEXTLINE
-void swap(List<T>& a, List<T>& b) {
+void swap(List<T>& a, List<T>& b) {  // NOLINT
     a.Swap(b);
 }
 }  // namespace std
