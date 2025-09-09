@@ -6,6 +6,7 @@
 #include <functional>
 #include <iterator>
 #include <utility>
+#include <stdexcept>
 
 template <typename T>
 class ForwardList {
@@ -25,19 +26,19 @@ private:
 public:
     class ForwardListIterator {
     public:
-        using iterator_category = std::forward_iterator_tag;
-        using value_type = T;
-        using difference_type = std::ptrdiff_t;
-        using pointer = T*;
-        using reference = T&;
+        using IteratorCategory = std::forward_iterator_tag;
+        using ValueType = T;
+        using DifferenceType = std::ptrdiff_t;
+        using Pointer = T*;
+        using Reference = T&;
 
         ForwardListIterator() : current_(nullptr) {}
         
-        reference operator*() const {
+        Reference operator*() const {
             return current_->value_;
         }
         
-        pointer operator->() const {
+        Pointer operator->() const {
             return &current_->value_;
         }
         
