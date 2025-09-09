@@ -1,20 +1,16 @@
 #pragma once
-
+#include <iostream>
 #include <string>
 
 namespace filesystem {
 
 class File {
 public:
-    void Read(size_t /*bytes*/) const;
-
-    // overwrite
-    void Write();
-
-    void Append();
-
-private:
     std::string content;
+
+    void Read(size_t bytes = 0) const;
+    void Write();
+    void Append(const std::string& data);
 };
 
-}  // end namespace filesystem
+}  // namespace filesystem
