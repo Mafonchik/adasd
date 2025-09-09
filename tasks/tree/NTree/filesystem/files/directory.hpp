@@ -2,7 +2,6 @@
 
 #include <vector>
 
-#include "../fs.hpp"
 #include "../map/map.hpp"
 #include "file.hpp"
 
@@ -14,9 +13,12 @@ class Directory {
     void GetName() const;
 
 private:
-    Directory* parent;
-    Map<std::string, Directory*> childs;
-    Map<std::string, File> files;
+    explicit Directory(Directory* parent = nullptr);
+    ~Directory();
+
+    Directory* parent_;
+    Map<std::string, Directory*> childs_;
+    Map<std::string, File> files_;
 };
 
-}  // end namespace filesystem
+}  // namespace filesystem
