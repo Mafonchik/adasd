@@ -7,17 +7,30 @@
 
 namespace filesystem::exceptions {
 
-class FileNotFoundException : std::exception {
+class FileNotFoundException : public std::exception {
 public:
-    explicit FileNotFoundException(const std::string& filename) : error_message_(filename) {
+    explicit FileNotFoundException(const std::string& msg) : msg_("FileSystemError: " + msg) {
     }
 
     const char* what() const noexcept override {
-        return error_message_.data();
+        return msg_.c_str();
     }
 
 private:
-    std::string_view error_message_;
+    std::string msg_;
 };
 
-}  // end namespace filesystem::exceptions
+class FileAlreadyExistsException : public std::exception {
+public:
+    explicit FileAlreadyExistsException(const std::string& msg) : msg_("FileSystemError: " + msg) {
+    }
+
+    const char* what() const noexcept override {
+        return msg_.c_str();
+    }
+
+private:
+    std::string msg_;
+};
+
+}  // namespace filesystem::exceptions
