@@ -21,58 +21,58 @@ public:
         using DifferenceType = std::ptrdiff_t;
         using IteratorCategory = std::forward_iterator_tag;
 
-        bool operator==(const MapIterator& other) const {
-            return current_node_ == other.current_node_;
+        bool operator==(const MapIterator& o) const {
+            return cur_ == o.cur_;
         }
-        bool operator!=(const MapIterator& other) const {
-            return current_node_ != other.current_node_;
+        bool operator!=(const MapIterator& o) const {
+            return cur_ != o.cur_;
         }
         ReferenceType operator*() const {
-            return current_node_->data_;
+            return cur_->kv_;
         }
         PointerType operator->() const {
-            return &current_node_->data_;
+            return &cur_->kv_;
         }
 
         MapIterator& operator++() {
-            if (!current_node_) {
+            if (!cur_) {
                 return *this;
             }
-            if (current_node_->right_is_thread_) {
-                current_node_ = current_node_->right_;
+            if (cur_->r_is_thr_) {
+                cur_ = cur_->r_;
             } else {
-                Node* temp = current_node_->right_;
-                while (temp && temp->left_) {
-                    temp = temp->left_;
+                Node* t = cur_->r_;
+                while (t && t->l_) {
+                    t = t->l_;
                 }
-                current_node_ = temp;
+                cur_ = t;
             }
             return *this;
         }
 
         MapIterator operator++(int) {
-            MapIterator temp = *this;
+            MapIterator tmp = *this;
             ++(*this);
-            return temp;
+            return tmp;
         }
 
     private:
-        explicit MapIterator(Node* node) : current_node_(node) {
+        explicit MapIterator(Node* n) : cur_(n) {
         }
-        Node* current_node_{nullptr};
+        Node* cur_{nullptr};
         friend class Map;
     };
 
-    Map() : root_(nullptr), size_(0), comp_(Compare{}), threads_valid_(true) {
+    Map() : root_(nullptr), sz_(0), comp_(Compare{}), threads_ok_(true) {
     }
 
     MapIterator Begin() const noexcept {
         EnsureThreaded();
-        Node* current = root_;
-        while (current && current->left_) {
-            current = current->left_;
+        Node* t = root_;
+        while (t && t->l_) {
+            t = t->l_;
         }
-        return MapIterator(current);
+        return MapIterator(t);
     }
 
     MapIterator End() const noexcept {
@@ -82,176 +82,176 @@ public:
 
     Value& operator[](const Key& key) {
         Node** link = &root_;
-        Node* current = root_;
-        while (current) {
-            if (comp_(key, current->data_.first)) {
-                link = &current->left_;
-                current = current->left_;
-            } else if (comp_(current->data_.first, key)) {
-                if (current->right_is_thread_) {
-                    link = &current->right_;
-                    current = nullptr;
+        Node* n = root_;
+        while (n) {
+            if (comp_(key, n->kv_.first)) {
+                link = &n->l_;
+                n = n->l_;
+            } else if (comp_(n->kv_.first, key)) {
+                if (n->r_is_thr_) {
+                    link = &n->r_;
+                    n = nullptr;
                 } else {
-                    link = &current->right_;
-                    current = current->right_;
+                    link = &n->r_;
+                    n = n->r_;
                 }
             } else {
-                return current->data_.second;
+                return n->kv_.second;
             }
         }
         *link = new Node(std::pair<const Key, Value>(key, Value{}));
-        ++size_;
-        threads_valid_ = false;
-        return (*link)->data_.second;
+        ++sz_;
+        threads_ok_ = false;
+        return (*link)->kv_.second;
     }
 
     bool IsEmpty() const noexcept {
-        return size_ == 0;
+        return sz_ == 0;
     }
     size_t Size() const noexcept {
-        return size_;
+        return sz_;
     }
 
-    void Swap(Map& other) {
-        static_assert(std::is_same<decltype(this->comp_), decltype(other.comp_)>::value, "Comparer mismatch");
+    void Swap(Map& a) {
+        static_assert(std::is_same<decltype(this->comp_), decltype(a.comp_)>::value, "Comparer mismatch");
         using std::swap;
-        swap(root_, other.root_);
-        swap(size_, other.size_);
-        swap(comp_, other.comp_);
-        threads_valid_ = false;
-        other.threads_valid_ = false;
+        swap(root_, a.root_);
+        swap(sz_, a.sz_);
+        swap(comp_, a.comp_);
+        threads_ok_ = false;
+        a.threads_ok_ = false;
     }
 
-    std::vector<std::pair<const Key, Value>> Values(bool increasing = true) const noexcept {
-        std::vector<std::pair<const Key, Value>> values;
-        values.reserve(size_);
-        if (increasing) {
-            TraverseInOrder(root_, values);
+    std::vector<std::pair<const Key, Value>> Values(bool inc = true) const noexcept {
+        std::vector<std::pair<const Key, Value>> v;
+        v.reserve(sz_);
+        if (inc) {
+            GoIn(root_, v);
         } else {
-            TraverseDecreasing(root_, values);
+            GoDe(root_, v);
         }
-        return values;
+        return v;
     }
 
-    void Insert(const std::pair<const Key, Value>& value) {
+    void Insert(const std::pair<const Key, Value>& val) {
         Node** link = &root_;
-        Node* current = root_;
-        while (current) {
-            if (comp_(value.first, current->data_.first)) {
-                link = &current->left_;
-                current = current->left_;
-            } else if (comp_(current->data_.first, value.first)) {
-                if (current->right_is_thread_) {
-                    link = &current->right_;
-                    current = nullptr;
+        Node* n = root_;
+        while (n) {
+            if (comp_(val.first, n->kv_.first)) {
+                link = &n->l_;
+                n = n->l_;
+            } else if (comp_(n->kv_.first, val.first)) {
+                if (n->r_is_thr_) {
+                    link = &n->r_;
+                    n = nullptr;
                 } else {
-                    link = &current->right_;
-                    current = current->right_;
+                    link = &n->r_;
+                    n = n->r_;
                 }
             } else {
-                current->data_.second = value.second;
+                n->kv_.second = val.second;
                 return;
             }
         }
-        *link = new Node(value);
-        ++size_;
-        threads_valid_ = false;
+        *link = new Node(val);
+        ++sz_;
+        threads_ok_ = false;
     }
 
     void Insert(const std::initializer_list<std::pair<const Key, Value>>& values) {
-        for (auto& value : values) {
-            Insert(value);
+        for (auto& x : values) {
+            Insert(x);
         }
     }
 
     void Erase(const Key& key) {
         Node** link = &root_;
-        Node* current = root_;
-        while (current) {
-            if (comp_(key, current->data_.first)) {
-                link = &current->left_;
-                current = current->left_;
-            } else if (comp_(current->data_.first, key)) {
-                if (current->right_is_thread_) {
+        Node* n = root_;
+        while (n) {
+            if (comp_(key, n->kv_.first)) {
+                link = &n->l_;
+                n = n->l_;
+            } else if (comp_(n->kv_.first, key)) {
+                if (n->r_is_thr_) {
                     break;
                 }
-                link = &current->right_;
-                current = current->right_;
+                link = &n->r_;
+                n = n->r_;
             } else {
                 break;
             }
         }
-        if (!current) {
+        if (!n) {
             throw 0;
         }
 
-        if (current->left_ == nullptr && (current->right_is_thread_ || current->right_ == nullptr)) {
+        if (n->l_ == nullptr && (n->r_is_thr_ || n->r_ == nullptr)) {
             *link = nullptr;
-            delete current;
-            --size_;
-            threads_valid_ = false;
+            delete n;
+            --sz_;
+            threads_ok_ = false;
             return;
         }
 
-        if (current->left_ == nullptr && !current->right_is_thread_) {
-            *link = current->right_;
-            delete current;
-            --size_;
-            threads_valid_ = false;
+        if (n->l_ == nullptr && !n->r_is_thr_) {
+            *link = n->r_;
+            delete n;
+            --sz_;
+            threads_ok_ = false;
             return;
         }
 
-        if (current->left_ != nullptr && (current->right_is_thread_ || current->right_ == nullptr)) {
-            *link = current->left_;
-            delete current;
-            --size_;
-            threads_valid_ = false;
+        if (n->l_ != nullptr && (n->r_is_thr_ || n->r_ == nullptr)) {
+            *link = n->l_;
+            delete n;
+            --sz_;
+            threads_ok_ = false;
             return;
         }
 
-        Node** successor_link = &current->right_;
-        Node* successor = current->right_;
-        while (successor->left_) {
-            successor_link = &successor->left_;
-            successor = successor->left_;
+        Node** slink = &n->r_;
+        Node* s = n->r_;
+        while (s->l_) {
+            slink = &s->l_;
+            s = s->l_;
         }
-        Node* replacement = (successor->right_is_thread_ ? nullptr : successor->right_);
-        *successor_link = replacement;
+        Node* rep = (s->r_is_thr_ ? nullptr : s->r_);
+        *slink = rep;
 
-        successor->left_ = current->left_;
-        if (successor == current->right_) {
-            successor->right_ = replacement;
+        s->l_ = n->l_;
+        if (s == n->r_) {
+            s->r_ = rep;
         } else {
-            successor->right_ = current->right_;
+            s->r_ = n->r_;
         }
-        successor->right_is_thread_ = false;
+        s->r_is_thr_ = false;
 
-        *link = successor;
-        delete current;
-        --size_;
-        threads_valid_ = false;
+        *link = s;
+        delete n;
+        --sz_;
+        threads_ok_ = false;
     }
 
     void Clear() noexcept {
-        DestroyTree(root_);
+        Drop(root_);
         root_ = nullptr;
-        size_ = 0;
-        threads_valid_ = true;
+        sz_ = 0;
+        threads_ok_ = true;
     }
 
     typename Map::MapIterator Find(const Key& key) const {
         EnsureThreaded();
-        Node* current = root_;
-        while (current) {
-            if (comp_(key, current->data_.first)) {
-                current = current->left_;
-            } else if (comp_(current->data_.first, key)) {
-                if (current->right_is_thread_) {
+        Node* n = root_;
+        while (n) {
+            if (comp_(key, n->kv_.first)) {
+                n = n->l_;
+            } else if (comp_(n->kv_.first, key)) {
+                if (n->r_is_thr_) {
                     return End();
                 }
-                current = current->right_;
+                n = n->r_;
             } else {
-                return MapIterator(current);
+                return MapIterator(n);
             }
         }
         return End();
@@ -266,104 +266,103 @@ private:
         friend class MapIterator;
         friend class Map;
 
-        std::pair<const Key, Value> data_;
-        Node* left_;
-        Node* right_;
-        bool right_is_thread_;
-        explicit Node(const std::pair<const Key, Value>& pair)
-        : data_(pair), left_(nullptr), right_(nullptr), right_is_thread_(false) {
+        std::pair<const Key, Value> kv_;
+        Node* l_;
+        Node* r_;
+        bool r_is_thr_;
+        explicit Node(const std::pair<const Key, Value>& p) : kv_(p), l_(nullptr), r_(nullptr), r_is_thr_(false) {
         }
     };
 
-    static void TraverseInOrder(Node* node, std::vector<std::pair<const Key, Value>>& values) {
-        if (!node) {
+    static void GoIn(Node* t, std::vector<std::pair<const Key, Value>>& v) {
+        if (!t) {
             return;
         }
-        TraverseInOrder(node->left_, values);
-        values.push_back(node->data_);
-        if (!node->right_is_thread_) {
-            TraverseInOrder(node->right_, values);
+        GoIn(t->l_, v);
+        v.push_back(t->kv_);
+        if (!t->r_is_thr_) {
+            GoIn(t->r_, v);
         }
     }
 
-    static void TraverseDecreasing(Node* node, std::vector<std::pair<const Key, Value>>& values) {
-        if (!node) {
+    static void GoDe(Node* t, std::vector<std::pair<const Key, Value>>& v) {
+        if (!t) {
             return;
         }
-        if (!node->right_is_thread_) {
-            TraverseDecreasing(node->right_, values);
+        if (!t->r_is_thr_) {
+            GoDe(t->r_, v);
         }
-        values.push_back(node->data_);
-        TraverseDecreasing(node->left_, values);
+        v.push_back(t->kv_);
+        GoDe(t->l_, v);
     }
 
-    void ResetThreadFlags(Node* node) const {
-        if (!node) {
+    void ResetThreadFlags(Node* t) const {
+        if (!t) {
             return;
         }
-        std::vector<Node*> stack;
-        Node* current = node;
-        while (current || !stack.empty()) {
-            while (current) {
-                stack.push_back(current);
-                current = current->left_;
+        std::vector<Node*> st;
+        Node* cur = t;
+        while (cur || !st.empty()) {
+            while (cur) {
+                st.push_back(cur);
+                cur = cur->l_;
             }
-            current = stack.back();
-            stack.pop_back();
-            current->right_is_thread_ = false;
-            current = current->right_;
+            cur = st.back();
+            st.pop_back();
+            cur->r_is_thr_ = false;
+            cur = cur->r_;
         }
     }
 
     void BuildThreads() const {
         ResetThreadFlags(root_);
-        Node* previous = nullptr;
-        std::vector<Node*> stack;
-        Node* current = root_;
-        while (current || !stack.empty()) {
-            while (current) {
-                stack.push_back(current);
-                current = current->left_;
+        Node* prev = nullptr;
+        std::vector<Node*> st;
+        Node* cur = root_;
+        while (cur || !st.empty()) {
+            while (cur) {
+                st.push_back(cur);
+                cur = cur->l_;
             }
-            current = stack.back();
-            stack.pop_back();
-            if (previous && previous->right_ == nullptr) {
-                previous->right_ = current;
-                previous->right_is_thread_ = true;
+            cur = st.back();
+            st.pop_back();
+            if (prev && prev->r_ == nullptr) {
+                prev->r_ = cur;
+                prev->r_is_thr_ = true;
             }
-            previous = current;
-            current = current->right_;
+            prev = cur;
+            cur = cur->r_;
         }
     }
 
     void EnsureThreaded() const {
-        if (!threads_valid_) {
+        if (!threads_ok_) {
             BuildThreads();
-            threads_valid_ = true;
+            threads_ok_ = true;
         }
     }
 
-    void DestroyTree(Node* node) noexcept {
-        if (!node) {
+    void Drop(Node* t) noexcept {
+        if (!t) {
             return;
         }
-        DestroyTree(node->left_);
-        if (!node->right_is_thread_) {
-            DestroyTree(node->right_);
+        Drop(t->l_);
+        if (!t->r_is_thr_) {
+            Drop(t->r_);
         }
-        delete node;
+        delete t;
     }
 
 private:
     Node* root_;
-    size_t size_;
+    size_t sz_;
     Compare comp_;
-    mutable bool threads_valid_;
+    mutable bool threads_ok_;
 };
 
 namespace std {
-    template <typename Key, typename Value, typename Compare>
-    inline void swap(Map<Key, Value, Compare>& first, Map<Key, Value, Compare>& second) {
-        first.Swap(second);
-    }
+template <typename Key, typename Value, typename Compare>
+inline void swap(Map<Key, Value, Compare>& a, Map<Key, Value, Compare>& b) {  // NOLINT(readability-identifier-naming)
+    a.Swap(b);
+}
 }  // namespace std
