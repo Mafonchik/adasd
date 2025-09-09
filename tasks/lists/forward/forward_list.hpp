@@ -22,11 +22,11 @@ private:
         T value_{};
         Node* next_{nullptr};
 
-        explicit Node(const T& val, Node* next = nullptr)
-            : value_(val), next_(next) {}
-        explicit Node(T&& val, Node* next = nullptr)
-            : value_(std::move(val)), next_(next) {}
-        
+        explicit Node(const T& val, Node* next = nullptr) : value_(val), next_(next) {
+        }
+        explicit Node(T&& val, Node* next = nullptr) : value_(std::move(val)), next_(next) {
+        }
+
         // Удаляем нежелательные операции
         Node(const Node&) = delete;
         Node& operator=(const Node&) = delete;
@@ -41,7 +41,8 @@ public:
         using DifferenceType = std::ptrdiff_t;
         using IteratorCategory = std::forward_iterator_tag;
 
-        ListIterator() : current_(nullptr), list_(nullptr) {}
+        ListIterator() : current_(nullptr), list_(nullptr) {
+        }
 
         ListIterator(const ListIterator& other) = default;
         ListIterator& operator=(const ListIterator& other) = default;
@@ -84,8 +85,8 @@ public:
         }
 
     private:
-        explicit ListIterator(Node* node, const ForwardList* list)
-            : current_(node), list_(list) {}
+        explicit ListIterator(Node* node, const ForwardList* list) : current_(node), list_(list) {
+        }
 
         Node* current_{nullptr};
         const ForwardList* list_{nullptr};
@@ -94,7 +95,8 @@ public:
     };
 
 public:
-    ForwardList() : head_(nullptr), tail_(nullptr), size_(0) {}
+    ForwardList() : head_(nullptr), tail_(nullptr), size_(0) {
+    }
 
     explicit ForwardList(size_t sz) : head_(nullptr), tail_(nullptr), size_(0) {
         try {
@@ -129,8 +131,7 @@ public:
         }
     }
 
-    ForwardList(ForwardList&& other) noexcept 
-        : head_(other.head_), tail_(other.tail_), size_(other.size_) {
+    ForwardList(ForwardList&& other) noexcept : head_(other.head_), tail_(other.tail_), size_(other.size_) {
         other.head_ = nullptr;
         other.tail_ = nullptr;
         other.size_ = 0;
@@ -140,7 +141,7 @@ public:
         if (this == &other) {
             return *this;
         }
-        
+
         ForwardList temp(other);
         Swap(temp);
         return *this;
@@ -152,7 +153,7 @@ public:
             head_ = other.head_;
             tail_ = other.tail_;
             size_ = other.size_;
-            
+
             other.head_ = nullptr;
             other.tail_ = nullptr;
             other.size_ = 0;
@@ -186,8 +187,12 @@ public:
         return tail_->value_;
     }
 
-    bool IsEmpty() const noexcept { return size_ == 0; }
-    size_t Size() const noexcept { return size_; }
+    bool IsEmpty() const noexcept {
+        return size_ == 0;
+    }
+    size_t Size() const noexcept {
+        return size_;
+    }
 
     void Swap(ForwardList& other) noexcept {
         std::swap(head_, other.head_);
@@ -208,7 +213,7 @@ public:
         if (pos.list_ != this) {
             throw std::runtime_error("Iterator does not belong to this list");
         }
-        
+
         Node* current = pos.current_;
         if (current == nullptr) {
             // EraseAfter(BeforeBegin()) - удаляем первый элемент
@@ -225,16 +230,16 @@ public:
         }
 
         if (current->next_ == nullptr) {
-            return; // Нет элемента после текущего
+            return;  // Нет элемента после текущего
         }
 
         Node* to_delete = current->next_;
         current->next_ = to_delete->next_;
-        
+
         if (to_delete == tail_) {
             tail_ = current;
         }
-        
+
         delete to_delete;
         --size_;
     }
@@ -243,7 +248,7 @@ public:
         if (pos.list_ != this) {
             throw std::runtime_error("Iterator does not belong to this list");
         }
-        
+
         Node* current = pos.current_;
         if (current == nullptr) {
             // InsertAfter(BeforeBegin()) - вставка в начало
@@ -253,11 +258,11 @@ public:
 
         Node* new_node = new Node(value, current->next_);
         current->next_ = new_node;
-        
+
         if (current == tail_) {
             tail_ = new_node;
         }
-        
+
         ++size_;
         return ListIterator(new_node, this);
     }
@@ -266,7 +271,7 @@ public:
         if (pos.list_ != this) {
             throw std::runtime_error("Iterator does not belong to this list");
         }
-        
+
         Node* n = pos.current_;
         if (!n) {
             return;  // удалять end() — no-op
@@ -298,7 +303,7 @@ public:
         if (pos.list_ != this) {
             throw std::runtime_error("Iterator does not belong to this list");
         }
-        
+
         // вставка ДО pos
         if (pos.current_ == nullptr) {  // вставка перед end() => push_back
             PushBack(value);
@@ -306,7 +311,7 @@ public:
         }
 
         Node* at = pos.current_;
-        
+
         // Находим предыдущий узел
         Node* prev = nullptr;
         Node* cur = head_;
@@ -316,13 +321,13 @@ public:
         }
 
         Node* nn = new Node(value, at);
-        
+
         if (prev) {
             prev->next_ = nn;
         } else {
             head_ = nn;
         }
-        
+
         ++size_;
         return ListIterator(nn, this);
     }
@@ -362,7 +367,7 @@ public:
         if (IsEmpty()) {
             throw ListIsEmptyException("List is empty");
         }
-        
+
         if (head_ == tail_) {
             delete head_;
             head_ = tail_ = nullptr;
@@ -374,7 +379,7 @@ public:
                 prev = cur;
                 cur = cur->next_;
             }
-            
+
             prev->next_ = nullptr;
             tail_ = prev;
             delete cur;
@@ -395,7 +400,9 @@ public:
         --size_;
     }
 
-    ~ForwardList() { Clear(); }
+    ~ForwardList() {
+        Clear();
+    }
 
 private:
     Node* head_{nullptr};
